@@ -15,14 +15,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	reg := gas.NewMiddlewareRegistry()
-	router := gas.NewRouter(reg)
+	if err := cfgMod.Bind(cfg); err != nil {
+		log.Fatal(err)
+	}
+
+	router := gas.NewRouter()
 	bus := gas.NewEventBus()
 
 	app := gas.NewApp(
 		gas.WithConfig(cfg),
 		gas.WithRouter(router),
-		gas.WithMiddlewareRegistry(reg),
 		gas.WithEventBus(bus),
 		gas.WithModule(cfgMod),
 		gas.WithModule(NewModule(WithRouter(router))),

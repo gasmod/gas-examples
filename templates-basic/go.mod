@@ -3,9 +3,9 @@ module github.com/gasmod/gas-examples/templates-basic
 go 1.25.6
 
 require (
-	github.com/gasmod/gas v0.0.6
+	github.com/gasmod/gas v0.0.9
 	github.com/gasmod/gas-config v0.0.1
-	github.com/gasmod/gas-ui v0.0.2
+	github.com/gasmod/gas-ui v0.0.3
 	github.com/go-chi/chi/v5 v5.2.5
 )
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gasmod/gas"
@@ -31,7 +32,12 @@ func (m *Module) Name() string {
 }
 
 func (m *Module) Init() error {
-	m.router.Handle(m.Name(), http.MethodGet, "/", m.handleIndex)
+	if m.router == nil {
+		return fmt.Errorf("gas: router not set")
+	}
+	if err := m.router.Handle(m.Name(), http.MethodGet, "/", m.handleIndex); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -40,5 +46,7 @@ func (m *Module) Close() error {
 }
 
 func (m *Module) handleIndex(w http.ResponseWriter, _ *http.Request) {
-	w.Write([]byte("Hello, world!"))
+	if _, err := w.Write([]byte("Hello, world!")); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
