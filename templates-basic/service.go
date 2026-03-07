@@ -7,38 +7,37 @@ import (
 	"github.com/gasmod/gas"
 )
 
-type Service struct {
+type Module struct {
 	router *gas.Router
-	ui     gas.UIProvider
 }
 
-func NewService(router *gas.Router, ui gas.UIProvider) *Service {
-	return &Service{router: router, ui: ui}
+func NewModule(router *gas.Router) *Module {
+	return &Module{router: router}
 }
 
-func (m *Service) Name() string {
+func (m *Module) Name() string {
 	return "landing-service"
 }
 
-func (m *Service) Init() error {
+func (m *Module) Init() error {
 	m.router.Handle(m.Name(), http.MethodGet, "/", m.handleIndex)
 	m.router.NotFound(m.Name(), m.handleNotFound)
 
 	return nil
 }
 
-func (m *Service) Close() error {
+func (m *Module) Close() error {
 	return nil
 }
 
-func (m *Service) handleIndex(w http.ResponseWriter, _ *http.Request) {
-	_ = m.ui.Render(w, "home", map[string]any{
+func (m *Module) handleIndex(ctx gas.Context, ui gas.UIProvider) error {
+	return ui.Render(ctx.ResponseWriter(), "home", map[string]any{
 		"Year": time.Now().Year(),
 	})
 }
 
-func (m *Service) handleNotFound(w http.ResponseWriter, _ *http.Request) {
-	_ = m.ui.RenderWithStatus(w, http.StatusNotFound, "404", map[string]any{
+func (m *Module) handleNotFound(ctx gas.Context, ui gas.UIProvider) error {
+	return ui.RenderWithStatus(ctx.ResponseWriter(), http.StatusNotFound, "404", map[string]any{
 		"Title": "Not Found",
 		"Year":  time.Now().Year(),
 	})

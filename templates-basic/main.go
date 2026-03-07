@@ -4,21 +4,37 @@ import (
 	"log"
 
 	"github.com/gasmod/gas"
-	config "github.com/gasmod/gas-config"
+	gasconfig "github.com/gasmod/gas-config"
+	gasenv "github.com/gasmod/gas-config/extensions/gas-env"
+	gaslog "github.com/gasmod/gas-log"
 	ui "github.com/gasmod/gas-ui"
-
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
+	cfgProvider := gasconfig.New()
+
+	// Environment defaults
+	cfgProvider.SetDefault(gasenv.DefaultConfigKey, gasenv.Development)
+
+	// UI defaults
+	cfgProvider.SetDefault("UI.StaticPath", "/static/*")
+	cfgProvider.SetDefault("UI.StaticStripPrefix", "/static/")
+
+	if err := cfgProvider.Load(); err != nil {
+		log.Fatalf("failed to load config: %s\n", err)
+	}
+
 	app := gas.NewApp(
-		gas.WithService[gas.ConfigProvider](config.New(), gas.ServiceLifetimeSingleton),
-		gas.WithService[gas.UIProvider](ui.New(), gas.ServiceLifetimeSingleton),
-		gas.WithService[*Service](NewService, gas.ServiceLifetimeSingleton),
+		gas.WithServiceInstance[gas.ConfigProvider](cfgProvider),
+		gas.WithSingletonService[gas.UIProvider](ui.New()),
+
+		gas.WithSingletonService[gas.Logger](gaslog.NewSlogLogger()),
+		gas.WithScopedService[RequestLogger](RequestLoggerCtor()),
+
+		gas.WithAppModule[*Module](NewModule),
 	)
 
-	app.Router().Use(gas.MiddlewareFunc(middleware.Logger))
-	app.Router().Use(gas.MiddlewareFunc(middleware.Recoverer))
+	app.Router().Use(gas.MiddlewareFunc(gas.RequestLogger[RequestLogger]()))
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
