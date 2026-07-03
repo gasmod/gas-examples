@@ -1,39 +1,65 @@
+// Templates demo showing layouts, partials, page rendering, config loading,
+// structured logging, and the request logger middleware.
 package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/gasmod/gas"
 	gasconfig "github.com/gasmod/gas-config"
-	gasenv "github.com/gasmod/gas-config/extensions/gas-env"
+	"github.com/gasmod/gas-config/providers"
 	gaslog "github.com/gasmod/gas-log"
+	template "github.com/gasmod/gas-template/fs"
 	ui "github.com/gasmod/gas-ui"
 )
 
 func main() {
-	cfgProvider := gasconfig.New()
-
-	// Environment defaults
-	cfgProvider.SetDefault(gasenv.DefaultConfigKey, gasenv.Development)
-
-	// UI defaults
-	cfgProvider.SetDefault("UI.StaticPath", "/static/*")
-	cfgProvider.SetDefault("UI.StaticStripPrefix", "/static/")
+	// Load configuration from config.json before building the app.
+	// gas-ui reads UI.StaticDir, UI.StaticPath, and UI.StaticStripPrefix
+	// from this config to set up static file serving.
+	cfgProvider := gasconfig.New(
+		gasconfig.WithProvider(providers.NewJSONProvider(
+			providers.WithJSONFilePath("config.json"),
+		)),
+	)
 
 	if err := cfgProvider.Load(); err != nil {
 		log.Fatalf("failed to load config: %s\n", err)
 	}
 
 	app := gas.NewApp(
+		// Pre-built config instance registered as a singleton. Other gas
+		// packages (gas-ui, gas-log, etc.) bind their settings from this
+		// provider automatically.
 		gas.WithServiceInstance[gas.ConfigProvider](cfgProvider),
-		gas.WithSingletonService[gas.UIProvider](ui.New()),
 
+		// Filesystem-backed template provider rooted at ./templates.
+		// gas-ui reads layouts/, partials/, and page templates from here.
+		gas.WithSingletonService[gas.TemplateProvider](template.NewStore(os.DirFS("templates"))),
+
+		// gas-ui renders templates and serves static files. The type
+		// parameter tells DI which concrete TemplateProvider type to
+		// resolve (here, the gas.TemplateProvider interface).
+		gas.WithSingletonService[gas.UIProvider](ui.New[gas.TemplateProvider]()),
+
+		// Singleton logger for service-level logging (startup, shutdown,
+		// background work). Uses slog with the default handler.
 		gas.WithSingletonService[gas.Logger](gaslog.NewSlogLogger()),
-		gas.WithScopedService[RequestLogger](RequestLoggerCtor()),
 
-		gas.WithAppModule[*Module](NewModule),
+		// Scoped request logger — see request_logger.go. Registered as a
+		// separate type so the request logger middleware can resolve it
+		// independently from the singleton gas.Logger.
+		gas.WithScopedService[RequestLogger](requestLogger),
+
+		// Application module — implements gas.Service for route registration.
+		gas.WithSingletonService[*Module](NewModule),
 	)
 
+	// RequestLogger middleware logs method, path, status, and duration for
+	// every request. It resolves the scoped RequestLogger (not the singleton
+	// gas.Logger) so that per-request fields like request ID are stamped on
+	// a clone, not the shared singleton.
 	app.Router().Use(gas.MiddlewareFunc(gas.RequestLogger[RequestLogger]()))
 
 	if err := app.Run(); err != nil {
